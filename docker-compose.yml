@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: fieldsync
+      POSTGRES_USER: fieldsync
+      POSTGRES_PASSWORD: fieldsync
+    ports:
+      - "5432:5432"
+    volumes:
+      - fieldsync-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fieldsync -d fieldsync"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: ./Backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://fieldsync:fieldsync@postgres:5432/fieldsync
+      JWT_SECRET: development-only-change-before-production
+      CORS_ORIGINS: http://localhost:5173,http://localhost
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  frontend:
+    build:
+      context: ./Frontend
+      args:
+        VITE_API_URL: http://localhost:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "5173:80"
+
+volumes:
+  fieldsync-postgres:
